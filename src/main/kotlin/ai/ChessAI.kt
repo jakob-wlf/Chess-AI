@@ -1,5 +1,6 @@
 package ai
 
+import Chessboard
 import Chessboard.Companion.BOARD_SIZE
 import GameManager
 import kotlinx.coroutines.Dispatchers
@@ -11,9 +12,9 @@ import java.awt.Color
 class ChessAI {
 
     companion object {
-        private const val searchDepth = 3
+        private const val searchDepth = 4
 
-        private val pieceValues = mapOf( // In centipawns
+        private val pieceValues = mapOf(
             "Pawn" to 100,
             "Knight" to 320,
             "Bishop" to 330,
@@ -22,19 +23,16 @@ class ChessAI {
             "King" to 0
         )
 
-        fun getNextMove(gameState: GameManager.GameState): Pair<Pair<Int, Int>, Pair<Int, Int>>? {
+        fun getNextMove(gameState: GameManager.GameState): Pair<Int, Int>? {
             println("AI is thinking...")
             val chessBoard = Chessboard.instance ?: return null
             val possibleMoves = gameState.getPossibleMoves()
 
-            // Evaluate each root move in parallel
-            val results: List<Pair<Pair<Pair<Int, Int>, Pair<Int, Int>>, Int>> = runBlocking {
+            val results: List<Pair<Pair<Int, Int>, Int>> = runBlocking {
                 possibleMoves.map { move ->
                     async(Dispatchers.Default) {
-
-                        // Clone State to not affect the actual game state while simulating moves
-                        val tempBoard = Array(BOARD_SIZE) { gameState.chessBoard[it].copyOf() }
-                        val tempState = GameManager.GameState(tempBoard, mutableListOf(), gameState.isWhiteTurn)
+                        val tempBoard = gameState.chessBoard.copyOf()
+                        val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
 
                         chessBoard.makeMove(move.first, move.second, tempState, ignoreKingSafety = true, updateUI = false, printErrors = false)
                         val score = alphabeta(tempState, searchDepth - 1, Int.MIN_VALUE, Int.MAX_VALUE, maximizing = !gameState.isWhiteTurn)
@@ -44,7 +42,6 @@ class ChessAI {
                 }.awaitAll()
             }
 
-            // Pick best result after all threads complete
             return if (gameState.isWhiteTurn) {
                 results.maxByOrNull { it.second }?.first
             } else {
@@ -58,61 +55,60 @@ class ChessAI {
 
             val possibleMoves = gameState.getPossibleMoves()
 
-            if(depth == 0 || Chessboard.instance?.isCheckmate(gameState) == true || Chessboard.instance?.isDraw(gameState) == true) {
-                return evaluate(gameState, possibleMoves)
+            if (depth == 0 || Chessboard.instance?.isCheckmate(possibleMoves, gameState) == true || Chessboard.instance?.isDraw(possibleMoves, gameState) == true) {
+                return evaluate(gameState, possibleMoves) // TODO: Use Transposition Table here to avoid re-evaluating positions we've already seen
             }
 
-            if(maximizing) {
+            if (maximizing) {
                 var value = Int.MIN_VALUE
-                for (move in possibleMoves) {
+                for (move in orderMoves(possibleMoves, gameState)) {
+                    val tempBoard = gameState.chessBoard.copyOf()
+                    val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
 
-                    // Clone State to not affect the actual game state while simulating moves
-                    val tempBoard = Array(BOARD_SIZE) { gameState.chessBoard[it].copyOf() }
-                    val tempState = GameManager.GameState(tempBoard, mutableListOf(), gameState.isWhiteTurn)
-
-                    Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = true, updateUI = false, printErrors = false)
-                    value = maxOf(value, alphabeta(tempState, depth - 1, alpha, beta, maximizing = false))
+                    Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
+                    value = maxOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = false))
 
                     a = maxOf(a, value)
-                    if (a >= b) {
-                        break // Beta cut-off
-                    }
+                    if (a >= b) break
                 }
-
                 return value
-            }
-            else {
+            } else {
                 var value = Int.MAX_VALUE
-                for (move in possibleMoves) {
+                for (move in orderMoves(possibleMoves, gameState)) {
+                    val tempBoard = gameState.chessBoard.copyOf()
+                    val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
 
-                    // Clone State to not affect the actual game state while simulating moves
-                    val tempBoard = Array(BOARD_SIZE) { gameState.chessBoard[it].copyOf() }
-                    val tempState = GameManager.GameState(tempBoard, mutableListOf(), gameState.isWhiteTurn)
-
-                    Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = true, updateUI = false, printErrors = false)
-                    value = minOf(value, alphabeta(tempState, depth - 1, alpha, beta, maximizing = true))
+                    Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
+                    value = minOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = true))
 
                     b = minOf(b, value)
-                    if (a >= b) {
-                        break // Beta cut-off
-                    }
+                    if (a >= b) break
                 }
-
                 return value
+            }
+        }
+
+        private fun orderMoves(moves: List<Pair<Int, Int>>, gameState: GameManager.GameState): List<Pair<Int, Int>> {
+            return moves.sortedByDescending { move ->
+                val targetPiece = gameState.chessBoard[move.second]
+                val movingPiece = gameState.chessBoard[move.first]
+                if (targetPiece != null) {
+                    // MVV-LVA: Most Valuable Victim - Least Valuable Attacker
+                    (pieceValues[targetPiece.type()] ?: 0) - (pieceValues[movingPiece?.type()] ?: 0) / 10
+                } else {
+                    0
+                }
             }
         }
 
         fun evaluate(
             gameState: GameManager.GameState,
-            preComputedPossibleMoves: List<Pair<Pair<Int, Int>, Pair<Int, Int>>>? = null
+            preComputedPossibleMoves: List<Pair<Int, Int>>? = null
         ): Int {
             var score = 0
-
             score += materialValue(gameState)
             score += pieceSquareTables(gameState)
-            score += mobility(gameState, preComputedPossibleMoves)
             score += pawnStructure(gameState)
-
             return score
         }
 
@@ -120,18 +116,17 @@ class ChessAI {
             var score = 0
             score += evaluatePawnsOfColor(gameState, Color.WHITE)
             score -= evaluatePawnsOfColor(gameState, Color.BLACK)
-
             return score
         }
 
-        private fun evaluatePawnsOfColor(gameState: GameManager.GameState, white: Color?): Int {
+        private fun evaluatePawnsOfColor(gameState: GameManager.GameState, color: Color?): Int {
             var score = 0
+            // Collect all pawns as (row, col) pairs for structural analysis
             val allPawns = mutableListOf<Pair<Int, Int>>()
-            for ((rowIndex, row) in gameState.chessBoard.withIndex()) {
-                for ((colIndex, piece) in row.withIndex()) {
-                    if (piece != null && piece.type() == "Pawn" && piece.color == white) {
-                        allPawns.add(Pair(rowIndex, colIndex))
-                    }
+            for (idx in gameState.chessBoard.indices) {
+                val piece = gameState.chessBoard[idx]
+                if (piece != null && piece.type() == "Pawn" && piece.color == color) {
+                    allPawns.add(Pair(idx / 8, idx % 8))
                 }
             }
 
@@ -157,7 +152,7 @@ class ChessAI {
             for (pawn in allPawns) {
                 val row = pawn.first
                 val col = pawn.second
-                val direction = if (white == Color.WHITE) -1 else 1
+                val direction = if (color == Color.WHITE) -1 else 1
                 val hasFriendlyPawnAhead = allPawns.any { it.first == row + direction && it.second == col }
                 if (!hasFriendlyPawnAhead) {
                     score -= 25
@@ -168,15 +163,16 @@ class ChessAI {
             for (pawn in allPawns) {
                 val row = pawn.first
                 val col = pawn.second
-                val direction = if (white == Color.WHITE) -1 else 1
-                val hasEnemyPawnAhead = gameState.chessBoard.withIndex().any { (r, rowPieces) ->
-                    rowPieces.withIndex().any { (c, piece) ->
-                        piece != null && piece.type() == "Pawn" && piece.color != white &&
-                                c == col && ((direction == -1 && r < row) || (direction == 1 && r > row))
-                    }
+                val direction = if (color == Color.WHITE) -1 else 1
+                val hasEnemyPawnAhead = gameState.chessBoard.indices.any { idx ->
+                    val r = idx / 8
+                    val c = idx % 8
+                    val piece = gameState.chessBoard[idx]
+                    piece != null && piece.type() == "Pawn" && piece.color != color &&
+                            c == col && ((direction == -1 && r < row) || (direction == 1 && r > row))
                 }
                 if (!hasEnemyPawnAhead) {
-                    val rank = if (white == Color.WHITE) 7 - row else row
+                    val rank = if (color == Color.WHITE) 7 - row else row
                     score += 20 * rank
                 }
             }
@@ -185,12 +181,9 @@ class ChessAI {
             for (pawn in allPawns) {
                 val row = pawn.first
                 val col = pawn.second
-                val direction = if (white == Color.WHITE) -1 else 1
-                val hasFriendlyPawnDiagonal = gameState.chessBoard.withIndex().any { (r, rowPieces) ->
-                    rowPieces.withIndex().any { (c, piece) ->
-                        piece != null && piece.type() == "Pawn" && piece.color == white &&
-                                ((c == col - 1 || c == col + 1) && r == row + direction)
-                    }
+                val direction = if (color == Color.WHITE) -1 else 1
+                val hasFriendlyPawnDiagonal = allPawns.any { other ->
+                    (other.second == col - 1 || other.second == col + 1) && other.first == row + direction
                 }
                 if (hasFriendlyPawnDiagonal) {
                     score += 15
@@ -200,47 +193,31 @@ class ChessAI {
             return score
         }
 
-        private fun mobility(
-            gameState: GameManager.GameState,
-            preComputedPossibleMoves: List<Pair<Pair<Int, Int>, Pair<Int, Int>>>?
-        ): Int {
-            preComputedPossibleMoves?: return 0
-
-            val whiteMoveCount = preComputedPossibleMoves.count { gameState.chessBoard[it.first.first][it.first.second]?.color == Color.WHITE }
-
-            val blackMoveCount = preComputedPossibleMoves.size - whiteMoveCount
-
-            return 5 * (whiteMoveCount - blackMoveCount)
-        }
-
         private fun pieceSquareTables(gameState: GameManager.GameState): Int {
             var value = 0
-            for ((rowIndex, row) in gameState.chessBoard.withIndex()) {
-                for ((colIndex, piece) in row.withIndex()) {
-                    if (piece != null) {
-                        val pieceValue = when (piece.type()) {
-                            "Pawn"   -> PieceSquareTables.getPawnValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                            "Knight" -> PieceSquareTables.getKnightValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                            "Bishop" -> PieceSquareTables.getBishopValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                            "Rook"   -> PieceSquareTables.getRookValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                            "Queen"  -> PieceSquareTables.getQueenValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                            else -> 0
-                        }
-                        value += if (piece.color == Color.WHITE) pieceValue else -pieceValue
-                    }
+            for (idx in gameState.chessBoard.indices) {
+                val piece = gameState.chessBoard[idx] ?: continue
+                val rowIndex = idx / 8
+                val colIndex = idx % 8
+                val pieceValue = when (piece.type()) {
+                    "Pawn"   -> PieceSquareTables.getPawnValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    "Knight" -> PieceSquareTables.getKnightValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    "Bishop" -> PieceSquareTables.getBishopValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    "Rook"   -> PieceSquareTables.getRookValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    "Queen"  -> PieceSquareTables.getQueenValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    else -> 0
                 }
+                value += if (piece.color == Color.WHITE) pieceValue else -pieceValue
             }
             return value
         }
 
         private fun materialValue(gameState: GameManager.GameState): Int {
             var value = 0
-            for(row in gameState.chessBoard) {
-                for(piece in row) {
-                    if(piece != null) {
-                        val pieceValue = pieceValues[piece.type()] ?: 0
-                        value += if(piece.color == Color.WHITE) pieceValue else -pieceValue
-                    }
+            for (piece in gameState.chessBoard) {
+                if (piece != null) {
+                    val pieceValue = pieceValues[piece.type()] ?: 0
+                    value += if (piece.color == Color.WHITE) pieceValue else -pieceValue
                 }
             }
             return value

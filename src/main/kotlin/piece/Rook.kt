@@ -1,5 +1,6 @@
 package piece
 
+import Chessboard
 import java.awt.Color
 
 class Rook(color: Color) : Piece(color) {
@@ -7,44 +8,45 @@ class Rook(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♖" else "♜"
     }
 
-    override fun isValidMove(from: Pair<Int, Int>, to: Pair<Int, Int>, board: Array<Array<Piece?>>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
-        val (fromRow, fromCol) = from
-        val (toRow, toCol) = to
+    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+        if (!Chessboard.isWithinBounds(to)) return false
+        if (from == to) return false
 
-        if(!Chessboard.isWithinBounds(to)) return false
-        if(fromRow == toRow && fromCol == toCol) return false
-
-        val chessBoardInstance = Chessboard.instance?: return false
-        val gameManager = GameManager.instance?: return false
-        if(!ignoreKingSafety && chessBoardInstance.canKingBeCapturedAfterMove(from, to, gameManager.gameState)) {
+        val chessBoardInstance = Chessboard.instance ?: return false
+        val gameManager = GameManager.instance ?: return false
+        if (!ignoreKingSafety && chessBoardInstance.canKingBeCapturedAfterMove(from, to, gameManager.gameState)) {
             return false
         }
 
-        // Can not move diagonally
-        if(fromRow != toRow && fromCol != toCol)  {
+        val fromRow = from / 8
+        val fromCol = from % 8
+        val toRow = to / 8
+        val toCol = to % 8
+
+        // Cannot move diagonally
+        if (fromRow != toRow && fromCol != toCol) {
             return false
         }
 
-        val targetPiece = board[toRow][toCol]
-        if(targetPiece != null && targetPiece.color == this.color) {
+        val targetPiece = board[to]
+        if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }
 
-        if(fromRow != toRow) {
-            val direction = if(toRow - fromRow > 0) 1 else -1
+        if (fromRow != toRow) {
+            val direction = if (toRow - fromRow > 0) 1 else -1
             var currentRow = fromRow + direction
             while (currentRow != toRow) {
-                if(board[currentRow][toCol] != null) {
+                if (board[currentRow * 8 + toCol] != null) {
                     return false
                 }
                 currentRow += direction
             }
-        }
-        else {
-            val direction = if(toCol - fromCol > 0) 1 else -1
+        } else {
+            val direction = if (toCol - fromCol > 0) 1 else -1
             var currentCol = fromCol + direction
             while (currentCol != toCol) {
-                if(board[toRow][currentCol] != null) {
+                if (board[toRow * 8 + currentCol] != null) {
                     return false
                 }
                 currentCol += direction

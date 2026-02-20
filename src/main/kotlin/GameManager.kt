@@ -4,7 +4,7 @@ import java.awt.Color
 class GameManager {
 
     val gameState: GameState = GameState(
-        Array(Chessboard.BOARD_SIZE) { Array(Chessboard.BOARD_SIZE) { null } },
+        Array(Chessboard.BOARD_SIZE * Chessboard.BOARD_SIZE) { null },
         mutableListOf(),
         true
     )
@@ -13,17 +13,18 @@ class GameManager {
         instance = this
     }
 
-    fun makeMove(from: Pair<Int, Int>, to: Pair<Int, Int>) {
+    fun makeMove(from: Int, to: Int) {
         val chessBoard = Chessboard.instance ?: return
         chessBoard.makeMove(from, to, gameState, ignoreKingSafety = false, updateUI = true, printErrors = true)
 
         println("Current evaluation: ${ai.ChessAI.evaluate(gameState, gameState.getPossibleMoves())}")
+        val possibleMoves: List<Pair<Int, Int>> = gameState.getPossibleMoves()
 
-        if(chessBoard.isCheckmate(gameState)) {
+        if(chessBoard.isCheckmate(possibleMoves, gameState)) {
             println("Checkmate! ${if(gameState.isWhiteTurn) "Black" else "White"} wins!")
             return
         }
-        else if(chessBoard.isDraw(gameState)) {
+        else if(chessBoard.isDraw(possibleMoves, gameState)) {
             println("It's a draw!")
             return
         }
@@ -43,7 +44,7 @@ class GameManager {
         var instance: GameManager? = null
     }
 
-    data class GameState(val chessBoard: Array<Array<Piece?>>, val moveHistory: MutableList<Chessboard.Move>, var isWhiteTurn: Boolean, val onlyOnePlayer: Boolean = true, val isSoloPlayerWhite: Boolean = true) {
+    data class GameState(val chessBoard: Array<Piece?>, val moveHistory: MutableList<Chessboard.Move>, var isWhiteTurn: Boolean, val onlyOnePlayer: Boolean = true, val isSoloPlayerWhite: Boolean = false) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
@@ -64,20 +65,16 @@ class GameManager {
             return result
         }
 
-        fun getPossibleMoves(): List<Pair<Pair<Int, Int>, Pair<Int, Int>>> {
-            val possibleMoves = mutableListOf<Pair<Pair<Int, Int>, Pair<Int, Int>>>()
-            for(row in 0..<Chessboard.BOARD_SIZE) {
-                for(col in 0..<Chessboard.BOARD_SIZE) {
-                    val piece = chessBoard[row][col] ?: continue
-                    if((piece.color == Color.WHITE && !isWhiteTurn) || (piece.color == Color.BLACK && isWhiteTurn)) {
-                        continue
-                    }
-                    for(toRow in 0..<Chessboard.BOARD_SIZE) {
-                        for(toCol in 0..<Chessboard.BOARD_SIZE) {
-                            if(piece.isValidMove(Pair(row, col), Pair(toRow, toCol), chessBoard, moveHistory, false)) {
-                                possibleMoves.add(Pair(Pair(row, col), Pair(toRow, toCol)))
-                            }
-                        }
+        fun getPossibleMoves(): List<Pair<Int, Int>> {
+            val possibleMoves = mutableListOf<Pair<Int, Int>>()
+            val currentColor = if (isWhiteTurn) Color.WHITE else Color.BLACK
+            for(i in chessBoard.indices) {
+                val piece = chessBoard[i] ?: continue
+                if((piece.color != currentColor)) continue
+
+                for (to in chessBoard.indices) {
+                    if (piece.isValidMove(i, to, chessBoard, moveHistory, false)) {
+                        possibleMoves.add(i to to)
                     }
                 }
             }

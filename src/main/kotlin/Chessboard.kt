@@ -13,12 +13,12 @@ class Chessboard(val window: Window) {
         }
     }
 
-    fun makeMove(from: Pair<Int, Int>, to: Pair<Int, Int>, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true) {
+    fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true) {
         val localChessBoard = gameState.chessBoard
         val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
-        val piece = localChessBoard[from.first][from.second]
+        val piece = localChessBoard[from]
         if (piece == null) {
             if(printErrors)
                 println("No piece at the source position.")
@@ -47,10 +47,10 @@ class Chessboard(val window: Window) {
             localMoveHistory.add(Move(from, to, piece))
         }
         else {
-            localChessBoard[to.first][to.second] = piece
-            localChessBoard[from.first][from.second] = null
-            if(piece is Pawn && (to.first == 0 || to.first == BOARD_SIZE - 1)) {
-                localChessBoard[to.first][to.second] = Queen(piece.color)
+            localChessBoard[to] = piece
+            localChessBoard[from] = null
+            if(piece is Pawn && (to < 8 || to > 55)) {
+                localChessBoard[to] = Queen(piece.color)
             }
             localMoveHistory.add(Move(from, to, piece))
         }
@@ -61,150 +61,146 @@ class Chessboard(val window: Window) {
             window.renderBoard(localChessBoard)
     }
 
-    private fun performEnPassant(board: Array<Array<Piece?>>, from: Pair<Int, Int>, to: Pair<Int, Int>, piece: Piece) {
-        board[from.first][to.second] = null
-        board[to.first][to.second] = piece
-        board[from.first][from.second] = null
+    private fun performEnPassant(board: Array<Piece?>, from: Int, to: Int, piece: Piece) {
+        board[from] = null
+        board[to] = piece
+        board[to + if(piece.color == Color.WHITE) 8 else -8] = null
     }
 
-    private fun isEnPassant(board: Array<Array<Piece?>>, from: Pair<Int, Int>, to: Pair<Int, Int>, piece: Piece): Boolean {
+    private fun isEnPassant(board: Array<Piece?>, from: Int, to: Int, piece: Piece): Boolean {
         if(piece !is Pawn) return false
-        if(from.first == to.first) return false
-        if(board[to.first][to.second] != null) return false
+
+        // Difference between from and to should be 7 or 9 (diagonal move)
+        if(abs(from - to) != 9 && abs(from - to) != 7) return false
+        if(board[to] != null) return false;
 
         return true
     }
 
-    private fun performCastling(board: Array<Array<Piece?>>, from: Pair<Int, Int>, to: Pair<Int, Int>, piece: Piece): Piece? {
-        val kingDirection = if(to.second - from.second > 0) 1 else -1
-        val rookColumn = if(kingDirection > 0) 7 else 0
-        val rook = board[to.first][rookColumn]!!
-        board[to.first][rookColumn] = null
-        board[to.first][from.second + kingDirection] = rook
+    private fun performCastling(board: Array<Piece?>, from: Int, to: Int, piece: Piece): Piece? {
+        val kingDirection = if(to - from > 0) 1 else -1
+        val rookOffset = if(kingDirection > 0) 3 else -4
+        val rook = board[from + rookOffset]!!
 
-        board[from.first][from.second] = null
-        board[to.first][to.second] = piece
+        board[from + kingDirection] = rook
+        board[from] = null
+        board[from + rookOffset] = null
+        board[to] = piece
 
         return rook
     }
 
-    private fun isCastling(from: Pair<Int, Int>, to: Pair<Int, Int>, piece: Piece): Boolean {
+    private fun isCastling(from: Int, to: Int, piece: Piece): Boolean {
         if(piece !is King) return false
-        if(from.first != to.first) return false
-        if(abs(from.second - to.second) != 2) return false
+        if(abs(from - to) != 2) return false
         return true
     }
 
-    private fun setupInitialPosition(chessBoard: Array<Array<Piece?>>) {
-        for(col in 0..<BOARD_SIZE) {
-            chessBoard[PAWN_START_ROWS["WHITE"]!!][col] = Pawn(Color.WHITE)
-            chessBoard[PAWN_START_ROWS["BLACK"]!!][col] = Pawn(Color.BLACK)
+    private fun setupInitialPosition(chessBoard: Array<Piece?>) {
+        for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
+            if(i in 48..55) {
+                chessBoard[i] = Pawn(Color.WHITE)
+            } else if(i in 8..15) {
+                chessBoard[i] = Pawn(Color.BLACK)
+            } else {
+                chessBoard[i] = null
+            }
         }
 
-        chessBoard[0][0] = Rook(Color.BLACK)
-        chessBoard[0][7] = Rook(Color.BLACK)
-        chessBoard[7][0] = Rook(Color.WHITE)
-        chessBoard[7][7] = Rook(Color.WHITE)
+        chessBoard[0] = Rook(Color.BLACK)
+        chessBoard[7] = Rook(Color.BLACK)
+        chessBoard[56] = Rook(Color.WHITE)
+        chessBoard[63] = Rook(Color.WHITE)
 
-        chessBoard[0][4] = King(Color.BLACK)
-        chessBoard[7][4] = King(Color.WHITE)
+        chessBoard[4] = King(Color.BLACK)
+        chessBoard[60] = King(Color.WHITE)
 
-        chessBoard[0][1] = Knight(Color.BLACK)
-        chessBoard[0][6] = Knight(Color.BLACK)
-        chessBoard[7][1] = Knight(Color.WHITE)
-        chessBoard[7][6] = Knight(Color.WHITE)
+        chessBoard[1] = Knight(Color.BLACK)
+        chessBoard[6] = Knight(Color.BLACK)
+        chessBoard[57] = Knight(Color.WHITE)
+        chessBoard[62] = Knight(Color.WHITE)
 
-        chessBoard[0][2] = Bishop(Color.BLACK)
-        chessBoard[0][5] = Bishop(Color.BLACK)
-        chessBoard[7][2] = Bishop(Color.WHITE)
-        chessBoard[7][5] = Bishop(Color.WHITE)
+        chessBoard[2] = Bishop(Color.BLACK)
+        chessBoard[5] = Bishop(Color.BLACK)
+        chessBoard[58] = Bishop(Color.WHITE)
+        chessBoard[61] = Bishop(Color.WHITE)
 
-        chessBoard[0][3] = Queen(Color.BLACK)
-        chessBoard[7][3] = Queen(Color.WHITE)
+        chessBoard[3] = Queen(Color.BLACK)
+        chessBoard[59] = Queen(Color.WHITE)
     }
 
     fun lastMove(localMoveHistory: MutableList<Move>): Move? {
         return if(localMoveHistory.isNotEmpty()) localMoveHistory.last() else null
     }
 
-    private fun canBeCaptured(position: Pair<Int, Int>, localChessBoard: Array<Array<Piece?>>, localMoveHistory: MutableList<Move>): Boolean {
-        val targetPiece = localChessBoard[position.first][position.second] ?: return true
+    private fun canBeCaptured(position: Int, localChessBoard: Array<Piece?>, localMoveHistory: MutableList<Move>): Boolean {
+        val targetPiece = localChessBoard[position] ?: return true
         val color = targetPiece.color
-        for(row in 0..<BOARD_SIZE) {
-            for(col in 0..<BOARD_SIZE) {
-                val piece = localChessBoard[row][col] ?: continue
-                if(piece.color != color) {
-                    val ignoreKingSafety = targetPiece is King
-                    if(piece.isValidMove(Pair(row, col), position, localChessBoard, localMoveHistory, ignoreKingSafety)) {
-                        return true
-                    }
+        for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
+            val piece = localChessBoard[i] ?: continue
+            if(piece.color != color) {
+                val ignoreKingSafety = targetPiece is King
+                if(piece.isValidMove(i, position, localChessBoard, localMoveHistory, ignoreKingSafety)) {
+                    return true
                 }
             }
         }
         return false
     }
 
-    private fun getKingPosition(color: Color, localChessBoard: Array<Array<Piece?>>): Pair<Int, Int>? {
-        for(row in 0..<BOARD_SIZE) {
-            for(col in 0..<BOARD_SIZE) {
-                val piece = localChessBoard[row][col] ?: continue
-                if(piece is King && piece.color == color) {
-                    return Pair(row, col)
-                }
+    private fun getKingPosition(color: Color, localChessBoard: Array<Piece?>): Int? {
+        for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
+            val piece = localChessBoard[i] ?: continue
+            if(piece is King && piece.color == color) {
+                return i
             }
         }
         return null
     }
 
-    fun isInCheck(color: Color, localChessBoard: Array<Array<Piece?>>, localMoveHistory: MutableList<Move>): Boolean {
+    fun isInCheck(color: Color, localChessBoard: Array<Piece?>, localMoveHistory: MutableList<Move>): Boolean {
         val kingPosition = getKingPosition(color, localChessBoard) ?: return false
         return canBeCaptured(kingPosition, localChessBoard, localMoveHistory)
     }
 
-    fun canKingBeCapturedAfterMove(from: Pair<Int, Int>, to: Pair<Int, Int>, gameState: GameManager.GameState): Boolean {
-        val tempBoard = Array(BOARD_SIZE) { row -> Array(BOARD_SIZE) { col -> gameState.chessBoard[row][col] } }
+    fun canKingBeCapturedAfterMove(from: Int, to: Int, gameState: GameManager.GameState): Boolean {
+        val tempBoard = Array(BOARD_SIZE * BOARD_SIZE) { pos -> gameState.chessBoard[pos] }
         val localMoveHistory = gameState.moveHistory.toMutableList()
         val tempState = GameManager.GameState(tempBoard, localMoveHistory, gameState.isWhiteTurn)
 
-        val piece = tempBoard[from.first][from.second] ?: return false
+        val piece = tempBoard[from] ?: return false
         makeMove(from, to, tempState,  ignoreKingSafety = true, updateUI = false, printErrors = false)
 
         return isInCheck(piece.color, tempState.chessBoard, tempState.moveHistory)
     }
 
-    fun isDraw(gameState: GameManager.GameState): Boolean {
+    fun isDraw(possibleMoves: List<Pair<Int, Int>>, gameState: GameManager.GameState): Boolean {
         val localChessBoard = gameState.chessBoard
         val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
-        return gameState.getPossibleMoves().isEmpty() && !isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
+        return possibleMoves.isEmpty() && !isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
     }
 
-    fun isCheckmate(gameState: GameManager.GameState): Boolean {
+    fun isCheckmate(possibleMoves: List<Pair<Int, Int>>, gameState: GameManager.GameState): Boolean {
         val localChessBoard = gameState.chessBoard
         val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
-        return gameState.getPossibleMoves().isEmpty() && isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
+        return possibleMoves.isEmpty() && isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
     }
 
     companion object {
         const val BOARD_SIZE: Int = 8
-        val PAWN_START_ROWS = mapOf(
-            "WHITE" to 6,
-            "BLACK" to 1
-        )
 
-        fun isWithinBounds(position: Pair<Int, Int>): Boolean {
-            if(position.first < 0 || position.second < 0) return false
-            val (row, col) = position
-            return row in 0..<BOARD_SIZE && col in 0..<BOARD_SIZE
+        fun isWithinBounds(position: Int): Boolean {
+            return !(position < 0 || position >= (BOARD_SIZE * BOARD_SIZE))
         }
 
         var instance: Chessboard? = null
     }
 
-    data class Move(val from: Pair<Int, Int>, val to: Pair<Int, Int>, val piece: Piece, val secondaryPiece: Piece? = null)
+    data class Move(val from: Int, val to: Int, val piece: Piece, val secondaryPiece: Piece? = null)
 
 
 }
