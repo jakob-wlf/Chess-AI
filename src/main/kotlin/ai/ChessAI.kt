@@ -12,7 +12,7 @@ import java.awt.Color
 class ChessAI {
 
     companion object {
-        private const val searchDepth = 4
+        private const val searchDepth = 5
 
         private val pieceValues = mapOf(
             "Pawn" to 100,
@@ -49,16 +49,58 @@ class ChessAI {
             }
         }
 
-        private fun alphabeta(gameState: GameManager.GameState, depth: Int, alpha: Int, beta: Int, maximizing: Boolean): Int {
-            var a = alpha
-            var b = beta
+        // Todo: Iterative Deepening Search
+        // TODO: Openings Book
+        private fun alphabeta(gameState: GameManager.GameState, depth: Int, alpha: Int, beta: Int, maximizing: Boolean, allowNullMove: Boolean = true): Int {
+            // Alpha and Beta are a window. Any score outside this window means the opponent will avoid it, so we can stop evaluating that branch (prune it)
+            var a = alpha // The best score the maximizing player can guarantee at this point or above
+            var b = beta // The best score the minimizing player can guarantee at this point or above
 
             val possibleMoves = gameState.getPossibleMoves()
+            val noMovesLeft = possibleMoves.isEmpty()
+            val isInCheck = Chessboard.instance?.isInCheck(if (gameState.isWhiteTurn) Color.WHITE else Color.BLACK, gameState.chessBoard, gameState.moveHistory) ?: false
+            val hasMajorPieces = gameState.chessBoard.any { it != null && it.type() != "Pawn" && it.type() != "King" }
 
-            if (depth == 0 || Chessboard.instance?.isCheckmate(possibleMoves, gameState) == true || Chessboard.instance?.isDraw(possibleMoves, gameState) == true) {
+            if (noMovesLeft) {
+                return if (isInCheck) {
+                    // We use depth in the score so the engine prefers faster mates.
+                    // If it's white's turn and they're in checkmate, black won — return a large negative score.
+                    // If it's black's turn and they're in checkmate, white won — return a large positive score.
+                    if (gameState.isWhiteTurn) {
+                        -(100000 - depth) // White is checkmated, bad for maximizer
+                    } else {
+                        100000 - depth  // Black is checkmated, good for maximizer
+                    }
+                } else {
+                    0 // Stalemate — draw
+                }
+            }
+
+            if (depth == 0) {
                 return evaluate(gameState, possibleMoves) // TODO: Use Transposition Table here to avoid re-evaluating positions we've already seen
             }
 
+            // Null Move Pruning
+            // Before searching through all moves we try and do nothing. If the score afterward is still >= beta then
+            // the position is so overwhelmingly good that we can safely prune the branch because the opponent has a better option somewhere in the tree
+            // Allow Null Moves as a safeguard against recursion, hasMajorPieces to avoid zugzwang, depth >= 3 because otherwise (depth - R - 1) could be <= 0
+            if(allowNullMove && !isInCheck && hasMajorPieces && depth >= 3) {
+                val R = 2 // Reduction depth
+                val nullBoard = gameState.chessBoard.copyOf()
+                val nullState = GameManager.GameState(nullBoard, gameState.moveHistory.toMutableList(), !gameState.isWhiteTurn)
+
+                // We pass in -b + 1 an -b to create a null window
+                // We only care whether the score is better than beta or worse. This small window allows much faster pruning
+                val nullScore = alphabeta(nullState, depth - R - 1, b - 1, b, maximizing = !maximizing, allowNullMove = false)
+
+                if(nullScore >= b) {
+                    // Fail hard beta cutoff
+                    // We return nothing greater than beta, just b alone is enough to cause a cutoff
+                    return b
+                }
+            }
+
+            // Alpha Beta Pruning
             if (maximizing) {
                 var value = Int.MIN_VALUE
                 for (move in orderMoves(possibleMoves, gameState)) {
@@ -68,7 +110,11 @@ class ChessAI {
                     Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
                     value = maxOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = false))
 
+                    // Raise the lower bound for the maximizer.
+                    // The maximizer is guaranteed to get at least this score, so we update alpha
                     a = maxOf(a, value)
+
+                    // Beta cutoff --> Minimizer would not allow this move as they have a better option somewhere else in the tree, so we can stop evaluating this branch
                     if (a >= b) break
                 }
                 return value
@@ -81,7 +127,11 @@ class ChessAI {
                     Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
                     value = minOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = true))
 
+                    // Lower the upper bound for the minimizer.
+                    // The minimizer is guaranteed to get at most this score, so we update beta (Low score is desirable for the minimizer)
                     b = minOf(b, value)
+
+                    // Alpha cutoff --> Maximizer would not allow this move as they have a better option somewhere else in the tree, so we can stop evaluating this branch
                     if (a >= b) break
                 }
                 return value

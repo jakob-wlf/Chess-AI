@@ -44,7 +44,7 @@ class GameManager {
         var instance: GameManager? = null
     }
 
-    data class GameState(val chessBoard: Array<Piece?>, val moveHistory: MutableList<Chessboard.Move>, var isWhiteTurn: Boolean, val onlyOnePlayer: Boolean = true, val isSoloPlayerWhite: Boolean = false) {
+    data class GameState(val chessBoard: Array<Piece?>, val moveHistory: MutableList<Chessboard.Move>, var isWhiteTurn: Boolean, val onlyOnePlayer: Boolean = true, val isSoloPlayerWhite: Boolean = true) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false

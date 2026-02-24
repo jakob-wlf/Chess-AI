@@ -13,7 +13,8 @@ class Chessboard(val window: Window) {
         }
     }
 
-    fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true) {
+    // TODO: Look into bitboards and also add undo move functionality
+    fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true, allowNullTurn: Boolean = false) {
         val localChessBoard = gameState.chessBoard
         val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
@@ -22,6 +23,11 @@ class Chessboard(val window: Window) {
         if (piece == null) {
             if(printErrors)
                 println("No piece at the source position.")
+            if(allowNullTurn) {
+                gameState.isWhiteTurn = !isWhiteTurn
+                if (updateUI)
+                    window.renderBoard(localChessBoard)
+            }
             return
         }
 
