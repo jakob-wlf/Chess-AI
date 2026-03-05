@@ -9,7 +9,7 @@ class Knight(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♘" else "♞"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         if (!Chessboard.isWithinBounds(to)) return false
         if (from == to) return false
 
@@ -19,7 +19,7 @@ class Knight(color: Color) : Piece(color) {
             return false
         }
 
-        val targetPiece = board[to]
+        val targetPiece = gameState.chessBoard[to]
         if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }

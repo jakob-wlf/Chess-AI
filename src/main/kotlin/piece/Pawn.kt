@@ -9,7 +9,7 @@ class Pawn(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♙" else "♟"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         val direction = if (color == Color.WHITE) -1 else 1
         val startRow = if (color == Color.WHITE) 6 else 1
 
@@ -30,13 +30,13 @@ class Pawn(color: Color) : Piece(color) {
         // Standard move forward
         if (toCol == fromCol) {
             // Move one square forward
-            if (toRow == fromRow + direction && board[to] == null) {
+            if (toRow == fromRow + direction && gameState.chessBoard[to] == null) {
                 return true
             }
             // Move two squares forward from starting position
             if (fromRow == startRow && toRow == fromRow + 2 * direction
-                && board[(fromRow + direction) * 8 + toCol] == null
-                && board[to] == null
+                && gameState.chessBoard[(fromRow + direction) * 8 + toCol] == null
+                && gameState.chessBoard[to] == null
             ) {
                 return true
             }
@@ -46,13 +46,13 @@ class Pawn(color: Color) : Piece(color) {
 
         // Capture move
         if (toRow == fromRow + direction && (toCol == fromCol + 1 || toCol == fromCol - 1)) {
-            val targetPiece = board[to]
+            val targetPiece = gameState.chessBoard[to]
             if (targetPiece != null && targetPiece.color != this.color) {
                 return true
             }
 
             // Check for en passant
-            return isEnPassantPossible(from, to, board, moveHistory)
+            return isEnPassantPossible(from, to, gameState)
         }
 
         return false
@@ -62,21 +62,16 @@ class Pawn(color: Color) : Piece(color) {
         return "Pawn"
     }
 
-    private fun isEnPassantPossible(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>): Boolean {
-        if (board[to] != null) return false
+    private fun isEnPassantPossible(from: Int, to: Int, gameState: GameManager.GameState): Boolean {
+        if (gameState.chessBoard[to] != null) return false
 
         val fromRow = from / 8
         val toCol = to % 8
 
-        val opponentPawn = board[fromRow * 8 + toCol] ?: return false
+        val opponentPawn = gameState.chessBoard[fromRow * 8 + toCol] ?: return false
         if (opponentPawn !is Pawn || opponentPawn.color == this.color) return false
 
-        val lastMove = Chessboard.instance?.lastMove(moveHistory) ?: return false
-        if (opponentPawn != lastMove.piece) return false
-
-        val lastFromRow = lastMove.from / 8
-        val lastToRow = lastMove.to / 8
-        if (abs(lastToRow - lastFromRow) != 2) return false
+        if(gameState.enPassantCaptureFile == -1 || gameState.enPassantCaptureFile != toCol) return false
 
         return true
     }

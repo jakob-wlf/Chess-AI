@@ -79,7 +79,7 @@ class Window : JFrame() {
                             } else {
                                 val from = selectedPiecePosition!!
                                 val piece = board[from] ?: return
-                                if (!piece.isValidMove(from, pos, board, gameManager.gameState.moveHistory, false)) {
+                                if (!piece.isValidMove(from, pos, gameManager.gameState, false)) {
                                     selectedPiecePosition = pos
                                     colorPossibleMoves(board, pos)
                                     return
@@ -140,7 +140,7 @@ class Window : JFrame() {
         }
 
         // Color possible moves green
-        piece.possibleMoves(pos, board, gameManager.gameState.moveHistory, false).forEach { movePos ->
+        piece.possibleMoves(pos, gameManager.gameState, false).forEach { movePos ->
             val mRow = movePos / 8
             val mCol = movePos % 8
             boardLabels[movePos]?.background = if ((mRow + mCol) % 2 == 0)

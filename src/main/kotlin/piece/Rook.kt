@@ -8,7 +8,7 @@ class Rook(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♖" else "♜"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         if (!Chessboard.isWithinBounds(to)) return false
         if (from == to) return false
 
@@ -28,7 +28,7 @@ class Rook(color: Color) : Piece(color) {
             return false
         }
 
-        val targetPiece = board[to]
+        val targetPiece = gameState.chessBoard[to]
         if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }
@@ -37,7 +37,7 @@ class Rook(color: Color) : Piece(color) {
             val direction = if (toRow - fromRow > 0) 1 else -1
             var currentRow = fromRow + direction
             while (currentRow != toRow) {
-                if (board[currentRow * 8 + toCol] != null) {
+                if (gameState.chessBoard[currentRow * 8 + toCol] != null) {
                     return false
                 }
                 currentRow += direction
@@ -46,7 +46,7 @@ class Rook(color: Color) : Piece(color) {
             val direction = if (toCol - fromCol > 0) 1 else -1
             var currentCol = fromCol + direction
             while (currentCol != toCol) {
-                if (board[toRow * 8 + currentCol] != null) {
+                if (gameState.chessBoard[toRow * 8 + currentCol] != null) {
                     return false
                 }
                 currentCol += direction

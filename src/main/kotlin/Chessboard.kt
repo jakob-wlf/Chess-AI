@@ -16,7 +16,6 @@ class Chessboard(val window: Window) {
     // TODO: Look into bitboards and also add undo move functionality
     fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true, allowNullTurn: Boolean = false) {
         val localChessBoard = gameState.chessBoard
-        val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
         val piece = localChessBoard[from]
@@ -38,19 +37,17 @@ class Chessboard(val window: Window) {
             return
         }
 
-        if (!piece.isValidMove(from, to, localChessBoard, localMoveHistory, ignoreKingSafety)) {
+        if (!piece.isValidMove(from, to, gameState, ignoreKingSafety)) {
             if(printErrors)
                 println("Invalid move for the selected piece.")
             return
         }
 
         if(isCastling(from, to, piece)) {
-            val secondaryPiece = performCastling(localChessBoard, from, to, piece)
-            localMoveHistory.add(Move(from, to, piece, secondaryPiece))
+            performCastling(localChessBoard, from, to, piece)
         }
         else if(isEnPassant(localChessBoard, from, to, piece)) {
             performEnPassant(localChessBoard, from, to, piece)
-            localMoveHistory.add(Move(from, to, piece))
         }
         else {
             localChessBoard[to] = piece
@@ -58,7 +55,35 @@ class Chessboard(val window: Window) {
             if(piece is Pawn && (to < 8 || to > 55)) {
                 localChessBoard[to] = Queen(piece.color)
             }
-            localMoveHistory.add(Move(from, to, piece))
+        }
+
+        // Set the En Passant Capture File
+        if(isPawnDoubleStep(from, to, piece)) {
+            gameState.enPassantCaptureFile = from % 8
+        }
+        else {
+            gameState.enPassantCaptureFile = -1
+        }
+
+        // Update the Castling Possibilities
+        if(piece is King) {
+            if(piece.color == Color.WHITE) {
+                gameState.whiteKingSideCastlePossible = false
+                gameState.whiteQueenSideCastlePossible = false
+            }
+            else {
+                gameState.blackKingSideCastlePossible = false
+                gameState.blackQueenSideCastlePossible = false
+            }
+        }
+        else if (piece is Rook) {
+            if(piece.color == Color.WHITE) {
+                if(from % 8 == 7) gameState.whiteKingSideCastlePossible = false
+                else gameState.whiteQueenSideCastlePossible = false
+            } else if(piece.color == Color.BLACK) {
+                if(from % 8 == 7) gameState.blackKingSideCastlePossible = false
+                else gameState.blackQueenSideCastlePossible = false
+            }
         }
 
         gameState.isWhiteTurn = !isWhiteTurn
@@ -71,6 +96,11 @@ class Chessboard(val window: Window) {
         board[from] = null
         board[to] = piece
         board[to + if(piece.color == Color.WHITE) 8 else -8] = null
+    }
+
+    fun isPawnDoubleStep(from: Int, to: Int, piece: Piece): Boolean {
+        if(piece !is Pawn) return false
+        return abs(from - to) == 16
     }
 
     private fun isEnPassant(board: Array<Piece?>, from: Int, to: Int, piece: Piece): Boolean {
@@ -139,14 +169,15 @@ class Chessboard(val window: Window) {
         return if(localMoveHistory.isNotEmpty()) localMoveHistory.last() else null
     }
 
-    private fun canBeCaptured(position: Int, localChessBoard: Array<Piece?>, localMoveHistory: MutableList<Move>): Boolean {
+    private fun canBeCaptured(position: Int, gameState: GameManager.GameState): Boolean {
+        val localChessBoard = gameState.chessBoard
         val targetPiece = localChessBoard[position] ?: return true
         val color = targetPiece.color
         for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
             val piece = localChessBoard[i] ?: continue
             if(piece.color != color) {
                 val ignoreKingSafety = targetPiece is King
-                if(piece.isValidMove(i, position, localChessBoard, localMoveHistory, ignoreKingSafety)) {
+                if(piece.isValidMove(i, position, gameState, ignoreKingSafety)) {
                     return true
                 }
             }
@@ -164,36 +195,41 @@ class Chessboard(val window: Window) {
         return null
     }
 
-    fun isInCheck(color: Color, localChessBoard: Array<Piece?>, localMoveHistory: MutableList<Move>): Boolean {
+    fun isInCheck(color: Color, gameState: GameManager.GameState): Boolean {
+        val localChessBoard = gameState.chessBoard
         val kingPosition = getKingPosition(color, localChessBoard) ?: return false
-        return canBeCaptured(kingPosition, localChessBoard, localMoveHistory)
+        return canBeCaptured(kingPosition, gameState)
     }
 
     fun canKingBeCapturedAfterMove(from: Int, to: Int, gameState: GameManager.GameState): Boolean {
         val tempBoard = Array(BOARD_SIZE * BOARD_SIZE) { pos -> gameState.chessBoard[pos] }
-        val localMoveHistory = gameState.moveHistory.toMutableList()
-        val tempState = GameManager.GameState(tempBoard, localMoveHistory, gameState.isWhiteTurn)
+        val tempState = GameManager.GameState(
+            chessBoard = tempBoard,
+            isWhiteTurn = gameState.isWhiteTurn,
+
+            whiteKingSideCastlePossible = gameState.whiteKingSideCastlePossible,
+            whiteQueenSideCastlePossible = gameState.whiteQueenSideCastlePossible,
+            blackKingSideCastlePossible = gameState.blackKingSideCastlePossible,
+            blackQueenSideCastlePossible = gameState.blackQueenSideCastlePossible,
+            enPassantCaptureFile = gameState.enPassantCaptureFile
+        )
 
         val piece = tempBoard[from] ?: return false
         makeMove(from, to, tempState,  ignoreKingSafety = true, updateUI = false, printErrors = false)
 
-        return isInCheck(piece.color, tempState.chessBoard, tempState.moveHistory)
+        return isInCheck(piece.color, tempState)
     }
 
     fun isDraw(possibleMoves: List<Pair<Int, Int>>, gameState: GameManager.GameState): Boolean {
-        val localChessBoard = gameState.chessBoard
-        val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
-        return possibleMoves.isEmpty() && !isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
+        return possibleMoves.isEmpty() && !isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, gameState)
     }
 
     fun isCheckmate(possibleMoves: List<Pair<Int, Int>>, gameState: GameManager.GameState): Boolean {
-        val localChessBoard = gameState.chessBoard
-        val localMoveHistory = gameState.moveHistory
         val isWhiteTurn = gameState.isWhiteTurn
 
-        return possibleMoves.isEmpty() && isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, localChessBoard, localMoveHistory)
+        return possibleMoves.isEmpty() && isInCheck(if(isWhiteTurn) Color.WHITE else Color.BLACK, gameState)
     }
 
     companion object {

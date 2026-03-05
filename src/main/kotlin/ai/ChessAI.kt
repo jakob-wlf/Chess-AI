@@ -8,13 +8,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import java.awt.Color
+import kotlin.math.min
 
 class ChessAI {
 
     companion object {
-        private const val searchDepth = 5
+        private const val searchDepth = 4
+        private val transpositionTable = TranspositionTable(sizeMb = 64)
 
-        private val pieceValues = mapOf(
+        private val pieceValues = mapOf( // In Centipawns
             "Pawn" to 100,
             "Knight" to 320,
             "Bishop" to 330,
@@ -28,14 +30,30 @@ class ChessAI {
             val chessBoard = Chessboard.instance ?: return null
             val possibleMoves = gameState.getPossibleMoves()
 
+            val depth = when {
+                possibleMoves.size > 20 -> searchDepth
+                possibleMoves.size > 8 -> searchDepth + 1
+                possibleMoves.size > 5 -> searchDepth + 2
+                else -> searchDepth + 3
+            }
+
             val results: List<Pair<Pair<Int, Int>, Int>> = runBlocking {
                 possibleMoves.map { move ->
                     async(Dispatchers.Default) {
                         val tempBoard = gameState.chessBoard.copyOf()
-                        val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
+                        val tempState = GameManager.GameState(
+                            chessBoard = tempBoard,
+                            isWhiteTurn = gameState.isWhiteTurn,
+
+                            whiteKingSideCastlePossible = gameState.whiteKingSideCastlePossible,
+                            whiteQueenSideCastlePossible = gameState.whiteQueenSideCastlePossible,
+                            blackKingSideCastlePossible = gameState.blackKingSideCastlePossible,
+                            blackQueenSideCastlePossible = gameState.blackQueenSideCastlePossible,
+                            enPassantCaptureFile = gameState.enPassantCaptureFile
+                        )
 
                         chessBoard.makeMove(move.first, move.second, tempState, ignoreKingSafety = true, updateUI = false, printErrors = false)
-                        val score = alphabeta(tempState, searchDepth - 1, Int.MIN_VALUE, Int.MAX_VALUE, maximizing = !gameState.isWhiteTurn)
+                        val score = alphabeta(tempState, depth - 1, Int.MIN_VALUE, Int.MAX_VALUE, maximizing = !gameState.isWhiteTurn)
 
                         move to score
                     }
@@ -51,14 +69,35 @@ class ChessAI {
 
         // Todo: Iterative Deepening Search
         // TODO: Openings Book
+        // TODO: Lomonosov Tablebases for endgame positions
         private fun alphabeta(gameState: GameManager.GameState, depth: Int, alpha: Int, beta: Int, maximizing: Boolean, allowNullMove: Boolean = true): Int {
             // Alpha and Beta are a window. Any score outside this window means the opponent will avoid it, so we can stop evaluating that branch (prune it)
             var a = alpha // The best score the maximizing player can guarantee at this point or above
             var b = beta // The best score the minimizing player can guarantee at this point or above
 
+            // Compute the Zobrist hash for this position and check the cache.
+            // If we find an entry that was searched at least as deep as the current depth,
+            // we can reuse the score (possibly adjusting the alpha/beta window) instead of re-searching the subtree.
+            val hash = ZobristKeys.computeHash(gameState)
+            val ttEntry = transpositionTable.lookup(hash)
+            if (ttEntry != null && ttEntry.depth >= depth) {
+                when (ttEntry.flag) {
+                    TranspositionTable.Flag.EXACT ->
+                        return ttEntry.score          // exact minimax value --> use directly
+
+                    TranspositionTable.Flag.LOWER_BOUND ->
+                        a = maxOf(a, ttEntry.score)   // tighten the lower bound
+
+                    TranspositionTable.Flag.UPPER_BOUND ->
+                        b = minOf(b, ttEntry.score)   // tighten the upper bound
+                }
+                // If the window has collapsed after tightening, prune immediately
+                if (a >= b) return ttEntry.score
+            }
+
             val possibleMoves = gameState.getPossibleMoves()
             val noMovesLeft = possibleMoves.isEmpty()
-            val isInCheck = Chessboard.instance?.isInCheck(if (gameState.isWhiteTurn) Color.WHITE else Color.BLACK, gameState.chessBoard, gameState.moveHistory) ?: false
+            val isInCheck = Chessboard.instance?.isInCheck(if (gameState.isWhiteTurn) Color.WHITE else Color.BLACK, gameState) ?: false
             val hasMajorPieces = gameState.chessBoard.any { it != null && it.type() != "Pawn" && it.type() != "King" }
 
             if (noMovesLeft) {
@@ -87,7 +126,16 @@ class ChessAI {
             if(allowNullMove && !isInCheck && hasMajorPieces && depth >= 3) {
                 val R = 2 // Reduction depth
                 val nullBoard = gameState.chessBoard.copyOf()
-                val nullState = GameManager.GameState(nullBoard, gameState.moveHistory.toMutableList(), !gameState.isWhiteTurn)
+                val nullState = GameManager.GameState(
+                    chessBoard = nullBoard,
+                    isWhiteTurn = !gameState.isWhiteTurn,
+
+                    whiteKingSideCastlePossible = gameState.whiteKingSideCastlePossible,
+                    whiteQueenSideCastlePossible = gameState.whiteQueenSideCastlePossible,
+                    blackKingSideCastlePossible = gameState.blackKingSideCastlePossible,
+                    blackQueenSideCastlePossible = gameState.blackQueenSideCastlePossible,
+                    enPassantCaptureFile = gameState.enPassantCaptureFile
+                )
 
                 // We pass in -b + 1 an -b to create a null window
                 // We only care whether the score is better than beta or worse. This small window allows much faster pruning
@@ -100,12 +148,24 @@ class ChessAI {
                 }
             }
 
+            val originalAlpha = a
+            var value: Int
+
             // Alpha Beta Pruning
             if (maximizing) {
-                var value = Int.MIN_VALUE
+                value = Int.MIN_VALUE
                 for (move in orderMoves(possibleMoves, gameState)) {
                     val tempBoard = gameState.chessBoard.copyOf()
-                    val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
+                    val tempState = GameManager.GameState(
+                        chessBoard = tempBoard,
+                        isWhiteTurn = gameState.isWhiteTurn,
+
+                        whiteKingSideCastlePossible = gameState.whiteKingSideCastlePossible,
+                        whiteQueenSideCastlePossible = gameState.whiteQueenSideCastlePossible,
+                        blackKingSideCastlePossible = gameState.blackKingSideCastlePossible,
+                        blackQueenSideCastlePossible = gameState.blackQueenSideCastlePossible,
+                        enPassantCaptureFile = gameState.enPassantCaptureFile
+                    )
 
                     Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
                     value = maxOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = false))
@@ -117,12 +177,20 @@ class ChessAI {
                     // Beta cutoff --> Minimizer would not allow this move as they have a better option somewhere else in the tree, so we can stop evaluating this branch
                     if (a >= b) break
                 }
-                return value
             } else {
-                var value = Int.MAX_VALUE
+                value = Int.MAX_VALUE
                 for (move in orderMoves(possibleMoves, gameState)) {
                     val tempBoard = gameState.chessBoard.copyOf()
-                    val tempState = GameManager.GameState(tempBoard, gameState.moveHistory.toMutableList(), gameState.isWhiteTurn)
+                    val tempState = GameManager.GameState(
+                        chessBoard = tempBoard,
+                        isWhiteTurn = gameState.isWhiteTurn,
+
+                        whiteKingSideCastlePossible = gameState.whiteKingSideCastlePossible,
+                        whiteQueenSideCastlePossible = gameState.whiteQueenSideCastlePossible,
+                        blackKingSideCastlePossible = gameState.blackKingSideCastlePossible,
+                        blackQueenSideCastlePossible = gameState.blackQueenSideCastlePossible,
+                        enPassantCaptureFile = gameState.enPassantCaptureFile
+                    )
 
                     Chessboard.instance?.makeMove(move.first, move.second, tempState, ignoreKingSafety = false, updateUI = false, printErrors = false)
                     value = minOf(value, alphabeta(tempState, depth - 1, a, b, maximizing = true))
@@ -134,8 +202,16 @@ class ChessAI {
                     // Alpha cutoff --> Maximizer would not allow this move as they have a better option somewhere else in the tree, so we can stop evaluating this branch
                     if (a >= b) break
                 }
-                return value
             }
+
+            val flag = when {
+                value <= originalAlpha -> TranspositionTable.Flag.UPPER_BOUND
+                value >= beta          -> TranspositionTable.Flag.LOWER_BOUND
+                else                   -> TranspositionTable.Flag.EXACT
+            }
+            transpositionTable.store(hash, depth, value, flag)
+
+            return value
         }
 
         private fun orderMoves(moves: List<Pair<Int, Int>>, gameState: GameManager.GameState): List<Pair<Int, Int>> {
@@ -245,20 +321,70 @@ class ChessAI {
 
         private fun pieceSquareTables(gameState: GameManager.GameState): Int {
             var value = 0
+
+            var numQueens = 0
+            var numRooks = 0
+            var numBishops = 0
+            var numKnights = 0
+
+            var whiteKingIdx = 0
+            var blackKingIdx = 0
+
             for (idx in gameState.chessBoard.indices) {
                 val piece = gameState.chessBoard[idx] ?: continue
                 val rowIndex = idx / 8
                 val colIndex = idx % 8
-                val pieceValue = when (piece.type()) {
-                    "Pawn"   -> PieceSquareTables.getPawnValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                    "Knight" -> PieceSquareTables.getKnightValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                    "Bishop" -> PieceSquareTables.getBishopValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                    "Rook"   -> PieceSquareTables.getRookValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                    "Queen"  -> PieceSquareTables.getQueenValue(rowIndex, colIndex, piece.color == Color.WHITE)
-                    else -> 0
+                var pieceValue = 0
+                when (piece.type()) {
+                    "Pawn"   -> {
+                        pieceValue = PieceSquareTables.getPawnValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                    }
+                    "Knight" -> {
+                        pieceValue = PieceSquareTables.getKnightValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                        numKnights += 1
+                    }
+                    "Bishop" -> {
+                        pieceValue = PieceSquareTables.getBishopValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                        numBishops += 1
+                    }
+                    "Rook"   -> {
+                        pieceValue = PieceSquareTables.getRookValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                        numRooks += 1
+                    }
+                    "Queen"  -> {
+                        pieceValue = PieceSquareTables.getQueenValue(rowIndex, colIndex, piece.color == Color.WHITE)
+                        numQueens += 1
+                    }
+                    "King" -> {
+                        if(piece.color == Color.WHITE) whiteKingIdx = idx
+                        else blackKingIdx = idx
+                    }
                 }
                 value += if (piece.color == Color.WHITE) pieceValue else -pieceValue
             }
+
+            val phase = min((numQueens * 4 + numRooks * 2 + numBishops + numKnights), 24)
+            val midGameKingScore = PieceSquareTables.getKingValueMG(
+                whiteKingIdx / 8,
+                whiteKingIdx % 8,
+                true
+            ) - PieceSquareTables.getKingValueMG(
+                blackKingIdx / 8,
+                blackKingIdx % 8,
+                false
+            )
+            val endgameKingScore = PieceSquareTables.getKingValueEG(
+                whiteKingIdx / 8,
+                whiteKingIdx % 8,
+                true
+            ) - PieceSquareTables.getKingValueEG(
+                blackKingIdx / 8,
+                blackKingIdx % 8,
+                false
+            )
+
+            value += ((midGameKingScore * phase + endgameKingScore * (24 - phase)) / 24)
+
             return value
         }
 

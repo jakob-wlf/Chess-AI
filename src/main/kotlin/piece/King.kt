@@ -9,7 +9,7 @@ class King(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♔" else "♚"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         if (!Chessboard.isWithinBounds(to)) return false
         if (from == to) return false
 
@@ -19,7 +19,7 @@ class King(color: Color) : Piece(color) {
             return false
         }
 
-        val targetPiece = board[to]
+        val targetPiece = gameState.chessBoard[to]
         if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }
@@ -36,15 +36,17 @@ class King(color: Color) : Piece(color) {
             return true
         }
 
-        return checkForCastling(from, to, board, moveHistory) && !chessBoardInstance.isInCheck(this.color, board, moveHistory)
+        return checkForCastling(from, to, gameState) && !chessBoardInstance.isInCheck(this.color, gameState)
     }
 
     override fun type(): String {
         return "King"
     }
 
-    private fun checkForCastling(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>): Boolean {
-        if (hasMoved(moveHistory)) return false
+    private fun checkForCastling(from: Int, to: Int, gameState: GameManager.GameState): Boolean {
+        if (color == Color.WHITE &&
+            !gameState.whiteKingSideCastlePossible &&
+            !gameState.whiteQueenSideCastlePossible) return false
 
         val fromRow = from / 8
         val fromCol = from % 8
@@ -58,12 +60,26 @@ class King(color: Color) : Piece(color) {
 
         val kingDirection = if (toCol - fromCol > 0) 1 else -1
         val rookColumn = if (kingDirection > 0) 7 else 0
-        val rook = board[fromRow * 8 + rookColumn] ?: return false
-        if (rook.hasMoved(moveHistory)) return false
+
+        // Check if Rook has moved
+        val isKingSide = (rookColumn == 7)
+        if(color == Color.WHITE) {
+            if((isKingSide && !gameState.whiteKingSideCastlePossible) ||
+                (!isKingSide && !gameState.whiteQueenSideCastlePossible))
+                return false
+        } else {
+            if((isKingSide && !gameState.blackKingSideCastlePossible) ||
+                (!isKingSide && !gameState.blackQueenSideCastlePossible))
+                return false
+        }
+
+        // Check if rook is till in place for safety bc Idfk anymore
+        val rookOffset = if(kingDirection > 0) 3 else -4
+        gameState.chessBoard[from + rookOffset]?: return false
 
         var currentCol = fromCol + kingDirection
-        while (currentCol != rookColumn - kingDirection) {
-            if (board[fromRow * 8 + currentCol] != null) return false
+        while (currentCol != rookColumn) {
+            if (gameState.chessBoard[fromRow * 8 + currentCol] != null) return false
             currentCol += kingDirection
         }
 

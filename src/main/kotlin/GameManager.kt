@@ -5,7 +5,6 @@ class GameManager {
 
     val gameState: GameState = GameState(
         Array(Chessboard.BOARD_SIZE * Chessboard.BOARD_SIZE) { null },
-        mutableListOf(),
         true
     )
 
@@ -44,7 +43,19 @@ class GameManager {
         var instance: GameManager? = null
     }
 
-    data class GameState(val chessBoard: Array<Piece?>, val moveHistory: MutableList<Chessboard.Move>, var isWhiteTurn: Boolean, val onlyOnePlayer: Boolean = true, val isSoloPlayerWhite: Boolean = true) {
+    data class GameState(val chessBoard: Array<Piece?>,
+
+                         var isWhiteTurn: Boolean,
+                         val onlyOnePlayer: Boolean = true,
+                         val isSoloPlayerWhite: Boolean = false,
+
+                         var whiteKingSideCastlePossible: Boolean = true,
+                         var whiteQueenSideCastlePossible: Boolean = true,
+                         var blackKingSideCastlePossible: Boolean = true,
+                         var blackQueenSideCastlePossible: Boolean = true,
+
+                         var enPassantCaptureFile: Int = -1
+    ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
@@ -52,7 +63,6 @@ class GameManager {
             other as GameState
 
             if (!chessBoard.contentDeepEquals(other.chessBoard)) return false
-            if (moveHistory != other.moveHistory) return false
             if (isWhiteTurn != other.isWhiteTurn) return false
 
             return true
@@ -60,7 +70,6 @@ class GameManager {
 
         override fun hashCode(): Int {
             var result = chessBoard.contentDeepHashCode()
-            result = 31 * result + moveHistory.hashCode()
             result = 31 * result + isWhiteTurn.hashCode()
             return result
         }
@@ -73,7 +82,7 @@ class GameManager {
                 if((piece.color != currentColor)) continue
 
                 for (to in chessBoard.indices) {
-                    if (piece.isValidMove(i, to, chessBoard, moveHistory, false)) {
+                    if (piece.isValidMove(i, to, this, false)) {
                         possibleMoves.add(i to to)
                     }
                 }

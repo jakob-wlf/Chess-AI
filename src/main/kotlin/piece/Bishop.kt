@@ -9,7 +9,7 @@ class Bishop(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♗" else "♝"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         if (!Chessboard.isWithinBounds(to)) return false
         if (from == to) return false
 
@@ -38,14 +38,14 @@ class Bishop(color: Color) : Piece(color) {
         var currentCol = fromCol + stepCol
         while (currentRow != toRow && currentCol != toCol) {
             val currentPos = currentRow * 8 + currentCol
-            if (Chessboard.isWithinBounds(currentPos) && board[currentPos] != null) {
+            if (Chessboard.isWithinBounds(currentPos) && gameState.chessBoard[currentPos] != null) {
                 return false // Path is blocked
             }
             currentRow += stepRow
             currentCol += stepCol
         }
 
-        val targetPiece = board[to]
+        val targetPiece = gameState.chessBoard[to]
         if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }

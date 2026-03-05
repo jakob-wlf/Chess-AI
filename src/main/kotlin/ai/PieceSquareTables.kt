@@ -1,5 +1,7 @@
 package ai
 
+import piece.King
+
 class PieceSquareTables {
     companion object {
         private val pawnTableWhite = arrayOf(
@@ -70,6 +72,33 @@ class PieceSquareTables {
         )
         fun getQueenValue(row: Int, col: Int, isWhite: Boolean): Int {
             return if (isWhite) QueenTableWhite[row][col] else QueenTableWhite[7 - row][col]
+        }
+
+        private val KingTableWhiteMG = arrayOf(
+            intArrayOf(-30,-40,-40,-50,-50,-40,-40,-30),
+            intArrayOf(-30,-40,-40,-50,-50,-40,-40,-30),
+            intArrayOf(-30,-40,-40,-50,-50,-40,-40,-30),
+            intArrayOf(-30,-40,-40,-50,-50,-40,-40,-30),
+            intArrayOf(-20,-30,-30,-40,-40,-30,-30,-20),
+            intArrayOf(-10,-20,-20,-20,-20,-20,-20,-10),
+            intArrayOf( 20, 20,  0,  0,  0,  0, 20, 20),
+            intArrayOf( 20, 30, 10,  0,  0, 10, 30, 20)
+        )
+        private val KingTableWhiteEG = arrayOf(
+            intArrayOf(-50,-40,-30,-20,-20,-30,-40,-50),
+            intArrayOf(-30,-20,-10,  0,  0,-10,-20,-30),
+            intArrayOf(-30,-10, 20, 30, 30, 20,-10,-30),
+            intArrayOf(-30,-10, 30, 40, 40, 30,-10,-30),
+            intArrayOf(-30,-10, 30, 40, 40, 30,-10,-30),
+            intArrayOf(-30,-10, 20, 30, 30, 20,-10,-30),
+            intArrayOf(-30,-30,  0,  0,  0,  0,-30,-30),
+            intArrayOf(-50,-30,-30,-30,-30,-30,-30,-50)
+        )
+        fun getKingValueMG(row: Int, col: Int, isWhite: Boolean): Int {
+            return if (isWhite) KingTableWhiteMG[row][col] else KingTableWhiteMG[7 - row][col]
+        }
+        fun getKingValueEG(row: Int, col: Int, isWhite: Boolean): Int {
+            return if (isWhite) KingTableWhiteEG[row][col] else KingTableWhiteEG[7 - row][col]
         }
     }
 }

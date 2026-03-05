@@ -9,7 +9,7 @@ class Queen(color: Color) : Piece(color) {
         return if (color == Color.WHITE) "♕" else "♛"
     }
 
-    override fun isValidMove(from: Int, to: Int, board: Array<Piece?>, moveHistory: MutableList<Chessboard.Move>, ignoreKingSafety: Boolean): Boolean {
+    override fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean {
         if (!Chessboard.isWithinBounds(to)) return false
         if (from == to) return false
 
@@ -19,7 +19,7 @@ class Queen(color: Color) : Piece(color) {
             return false
         }
 
-        val targetPiece = board[to]
+        val targetPiece = gameState.chessBoard[to]
         if (targetPiece != null && targetPiece.color == this.color) {
             return false
         }
@@ -44,7 +44,7 @@ class Queen(color: Color) : Piece(color) {
             var currentRow = fromRow + stepRow
             var currentCol = fromCol + stepCol
             while (currentRow != toRow && currentCol != toCol) {
-                if (board[currentRow * 8 + currentCol] != null) {
+                if (gameState.chessBoard[currentRow * 8 + currentCol] != null) {
                     return false // Path is blocked
                 }
                 currentRow += stepRow
@@ -57,7 +57,7 @@ class Queen(color: Color) : Piece(color) {
                 val direction = if (rowDiff > 0) 1 else -1
                 var currentRow = fromRow + direction
                 while (currentRow != toRow) {
-                    if (board[currentRow * 8 + toCol] != null) {
+                    if (gameState.chessBoard[currentRow * 8 + toCol] != null) {
                         return false
                     }
                     currentRow += direction
@@ -66,7 +66,7 @@ class Queen(color: Color) : Piece(color) {
                 val direction = if (colDiff > 0) 1 else -1
                 var currentCol = fromCol + direction
                 while (currentCol != toCol) {
-                    if (board[toRow * 8 + currentCol] != null) {
+                    if (gameState.chessBoard[toRow * 8 + currentCol] != null) {
                         return false
                     }
                     currentCol += direction
