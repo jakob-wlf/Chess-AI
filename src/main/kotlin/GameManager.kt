@@ -1,20 +1,39 @@
 import piece.Piece
 import java.awt.Color
 
-class GameManager {
+class GameManager(gameId: String? = null, isLichessGame: Boolean = false, color: Color? = null) {
 
-    val gameState: GameState = GameState(
-        Array(Chessboard.BOARD_SIZE * Chessboard.BOARD_SIZE) { null },
-        true
+    var gameState: GameState = GameState(
+        Array(Chessboard.BOARD_SIZE * Chessboard.BOARD_SIZE) { null }
     )
 
     init {
         instance = this
+        currentGameId = gameId
+
+        if(isLichessGame) {
+            gameState = GameState(
+                chessBoard = Array(Chessboard.BOARD_SIZE * Chessboard.BOARD_SIZE) { null },
+                onlyOnePlayer = false,
+                lichessBotColor = color
+            )
+        }
+
+        if(gameState.onlyOnePlayer && !isLichessGame) {
+            println("Starting a solo game. You are playing as ${if(gameState.isSoloPlayerWhite) "White" else "Black"}.")
+            if(!gameState.isSoloPlayerWhite) {
+                val thread = Thread {
+                    val aiMove = ai.ChessAI.getNextMove(gameState)
+                    makeMove(aiMove?.first ?: return@Thread, aiMove.second)
+                }
+                thread.start()
+            }
+        }
     }
 
-    fun makeMove(from: Int, to: Int) {
+    fun makeMove(from: Int, to: Int, pieceToPromoteTo: String = "queen") {
         val chessBoard = Chessboard.instance ?: return
-        chessBoard.makeMove(from, to, gameState, ignoreKingSafety = false, updateUI = true, printErrors = true)
+        chessBoard.makeMove(from, to, gameState, ignoreKingSafety = false, updateUI = true, printErrors = true, pieceToPromoteTo = pieceToPromoteTo)
 
         println("Current evaluation: ${ai.ChessAI.evaluate(gameState, gameState.getPossibleMoves())}")
         val possibleMoves: List<Pair<Int, Int>> = gameState.getPossibleMoves()
@@ -41,13 +60,15 @@ class GameManager {
 
     companion object {
         var instance: GameManager? = null
+        var currentGameId: String? = null
     }
 
     data class GameState(val chessBoard: Array<Piece?>,
 
-                         var isWhiteTurn: Boolean,
-                         val onlyOnePlayer: Boolean = true,
+                         var isWhiteTurn: Boolean = true,
+                         val onlyOnePlayer: Boolean = false,
                          val isSoloPlayerWhite: Boolean = false,
+                         val lichessBotColor: Color? = null,
 
                          var whiteKingSideCastlePossible: Boolean = true,
                          var whiteQueenSideCastlePossible: Boolean = true,

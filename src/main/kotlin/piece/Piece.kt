@@ -20,8 +20,4 @@ abstract class Piece(val color: Color) {
     abstract fun isValidMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean): Boolean
 
     abstract fun type(): String
-
-    fun hasMoved(moveHistory: MutableList<Chessboard.Move>): Boolean {
-        return moveHistory.any { it.piece == this || it.secondaryPiece == this }
-    }
 }

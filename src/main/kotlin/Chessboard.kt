@@ -2,19 +2,19 @@ import piece.*
 import java.awt.Color
 import kotlin.math.abs
 
-class Chessboard(val window: Window) {
+class Chessboard(val window: Window?) {
 
     init {
         instance = this
         val gameManager = GameManager.instance
         if(gameManager != null) {
             setupInitialPosition(gameManager.gameState.chessBoard)
-            window.renderBoard(gameManager.gameState.chessBoard)
+            window?.renderBoard(gameManager.gameState.chessBoard)
         }
     }
 
     // TODO: Look into bitboards and also add undo move functionality
-    fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true, allowNullTurn: Boolean = false) {
+    fun makeMove(from: Int, to: Int, gameState: GameManager.GameState, pieceToPromoteTo: String = "queen", ignoreKingSafety: Boolean = false, updateUI: Boolean = true, printErrors: Boolean = true, allowNullTurn: Boolean = false) {
         val localChessBoard = gameState.chessBoard
         val isWhiteTurn = gameState.isWhiteTurn
 
@@ -25,7 +25,7 @@ class Chessboard(val window: Window) {
             if(allowNullTurn) {
                 gameState.isWhiteTurn = !isWhiteTurn
                 if (updateUI)
-                    window.renderBoard(localChessBoard)
+                    window?.renderBoard(localChessBoard)
             }
             return
         }
@@ -53,7 +53,13 @@ class Chessboard(val window: Window) {
             localChessBoard[to] = piece
             localChessBoard[from] = null
             if(piece is Pawn && (to < 8 || to > 55)) {
-                localChessBoard[to] = Queen(piece.color)
+                localChessBoard[to] = when(pieceToPromoteTo.lowercase()) {
+                    "queen" -> Queen(piece.color)
+                    "rook" -> Rook(piece.color)
+                    "bishop" -> Bishop(piece.color)
+                    "knight" -> Knight(piece.color)
+                    else -> Queen(piece.color)
+                }
             }
         }
 
@@ -89,7 +95,7 @@ class Chessboard(val window: Window) {
         gameState.isWhiteTurn = !isWhiteTurn
 
         if (updateUI)
-            window.renderBoard(localChessBoard)
+            window?.renderBoard(localChessBoard)
     }
 
     private fun performEnPassant(board: Array<Piece?>, from: Int, to: Int, piece: Piece) {
@@ -130,43 +136,6 @@ class Chessboard(val window: Window) {
         if(piece !is King) return false
         if(abs(from - to) != 2) return false
         return true
-    }
-
-    private fun setupInitialPosition(chessBoard: Array<Piece?>) {
-        for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
-            if(i in 48..55) {
-                chessBoard[i] = Pawn(Color.WHITE)
-            } else if(i in 8..15) {
-                chessBoard[i] = Pawn(Color.BLACK)
-            } else {
-                chessBoard[i] = null
-            }
-        }
-
-        chessBoard[0] = Rook(Color.BLACK)
-        chessBoard[7] = Rook(Color.BLACK)
-        chessBoard[56] = Rook(Color.WHITE)
-        chessBoard[63] = Rook(Color.WHITE)
-
-        chessBoard[4] = King(Color.BLACK)
-        chessBoard[60] = King(Color.WHITE)
-
-        chessBoard[1] = Knight(Color.BLACK)
-        chessBoard[6] = Knight(Color.BLACK)
-        chessBoard[57] = Knight(Color.WHITE)
-        chessBoard[62] = Knight(Color.WHITE)
-
-        chessBoard[2] = Bishop(Color.BLACK)
-        chessBoard[5] = Bishop(Color.BLACK)
-        chessBoard[58] = Bishop(Color.WHITE)
-        chessBoard[61] = Bishop(Color.WHITE)
-
-        chessBoard[3] = Queen(Color.BLACK)
-        chessBoard[59] = Queen(Color.WHITE)
-    }
-
-    fun lastMove(localMoveHistory: MutableList<Move>): Move? {
-        return if(localMoveHistory.isNotEmpty()) localMoveHistory.last() else null
     }
 
     private fun canBeCaptured(position: Int, gameState: GameManager.GameState): Boolean {
@@ -235,14 +204,43 @@ class Chessboard(val window: Window) {
     companion object {
         const val BOARD_SIZE: Int = 8
 
+        fun setupInitialPosition(chessBoard: Array<Piece?>) {
+            for(i in 0..<(BOARD_SIZE * BOARD_SIZE)) {
+                if(i in 48..55) {
+                    chessBoard[i] = Pawn(Color.WHITE)
+                } else if(i in 8..15) {
+                    chessBoard[i] = Pawn(Color.BLACK)
+                } else {
+                    chessBoard[i] = null
+                }
+            }
+
+            chessBoard[0] = Rook(Color.BLACK)
+            chessBoard[7] = Rook(Color.BLACK)
+            chessBoard[56] = Rook(Color.WHITE)
+            chessBoard[63] = Rook(Color.WHITE)
+
+            chessBoard[4] = King(Color.BLACK)
+            chessBoard[60] = King(Color.WHITE)
+
+            chessBoard[1] = Knight(Color.BLACK)
+            chessBoard[6] = Knight(Color.BLACK)
+            chessBoard[57] = Knight(Color.WHITE)
+            chessBoard[62] = Knight(Color.WHITE)
+
+            chessBoard[2] = Bishop(Color.BLACK)
+            chessBoard[5] = Bishop(Color.BLACK)
+            chessBoard[58] = Bishop(Color.WHITE)
+            chessBoard[61] = Bishop(Color.WHITE)
+
+            chessBoard[3] = Queen(Color.BLACK)
+            chessBoard[59] = Queen(Color.WHITE)
+        }
+
         fun isWithinBounds(position: Int): Boolean {
             return !(position < 0 || position >= (BOARD_SIZE * BOARD_SIZE))
         }
 
         var instance: Chessboard? = null
     }
-
-    data class Move(val from: Int, val to: Int, val piece: Piece, val secondaryPiece: Piece? = null)
-
-
 }
